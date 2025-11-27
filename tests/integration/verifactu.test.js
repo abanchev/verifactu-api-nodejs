@@ -202,7 +202,7 @@ describe('VeriFactu Unit Tests', () => {
     test('should create F1 invoice correctly', async () => {
       const invoice = await createTestInvoice(testCompany.id, {
         name: 'Cliente Test F1',
-        vat_id: '99999999R',
+        vat_id: 'A82018474',
         verifactu_type: INVOICE_TYPE.F1,
         lines: [
           { descr: 'Servicio de consultoría', units: 10, price: 50, vat: 21 }
@@ -211,7 +211,7 @@ describe('VeriFactu Unit Tests', () => {
 
       expect(invoice).toBeDefined();
       expect(invoice.verifactu_type).toBe(INVOICE_TYPE.F1);
-      expect(invoice.vat_id).toBe('99999999R');
+      expect(invoice.vat_id).toBe('A82018474');
       expect(invoice.bi).toBe(500); // 10 * 50
       expect(invoice.tvat).toBe(105); // 500 * 0.21
       expect(invoice.total).toBe(605); // 500 + 105
@@ -236,7 +236,7 @@ describe('VeriFactu Unit Tests', () => {
       // First create F1
       const f1Invoice = await createTestInvoice(testCompany.id, {
         verifactu_type: INVOICE_TYPE.F1,
-        vat_id: 'C22222222'
+        vat_id: 'A82018474'
       });
 
       // Create R1 referencing F1
@@ -244,7 +244,7 @@ describe('VeriFactu Unit Tests', () => {
         verifactu_type: INVOICE_TYPE.R1,
         verifactu_stype: RECTIFICATION_TYPE.SUBSTITUTION,
         invoice_ref_id: f1Invoice.id,
-        vat_id: 'C22222222'
+        vat_id: 'A82018474'
       });
 
       expect(r1Invoice.verifactu_type).toBe(INVOICE_TYPE.R1);
@@ -257,7 +257,7 @@ describe('VeriFactu Unit Tests', () => {
     test('should build XML for F1 invoice', async () => {
       const invoice = await createTestInvoice(testCompany.id, {
         name: 'Cliente XML Test',
-        vat_id: 'D33333333',
+        vat_id: 'A82018474',
         verifactu_type: INVOICE_TYPE.F1,
         lines: [{ descr: 'Test Service', units: 1, price: 100, vat: 21 }]
       });
@@ -271,7 +271,7 @@ describe('VeriFactu Unit Tests', () => {
       expect(xml).toContain('<TipoFactura>F1</TipoFactura>');
       expect(xml).toContain('<IDEmisorFactura>B12345678</IDEmisorFactura>');
       expect(xml).toContain('<NombreRazon>Cliente XML Test</NombreRazon>');
-      expect(xml).toContain('<NIF>D33333333</NIF>');
+      expect(xml).toContain('<NIF>A82018474</NIF>');
       expect(xml).toContain('<Impuesto>01</Impuesto>');
       expect(xml).toContain('<TipoHuella>01</TipoHuella>');
       expect(xml).toContain('<PrimerRegistro>S</PrimerRegistro>');
@@ -303,7 +303,7 @@ describe('VeriFactu Unit Tests', () => {
       // Create original invoice
       const f1Invoice = await createTestInvoice(testCompany.id, {
         verifactu_type: INVOICE_TYPE.F1,
-        vat_id: 'E44444444'
+        vat_id: 'A82018474'
       });
 
       // Create rectification
@@ -311,7 +311,7 @@ describe('VeriFactu Unit Tests', () => {
         verifactu_type: INVOICE_TYPE.R1,
         verifactu_stype: RECTIFICATION_TYPE.SUBSTITUTION,
         invoice_ref_id: f1Invoice.id,
-        vat_id: 'E44444444'
+        vat_id: 'A82018474'
       });
 
       const company = await getCompany(testCompany.id);
@@ -329,7 +329,7 @@ describe('VeriFactu Unit Tests', () => {
     test('should include chain information when previous invoice exists', async () => {
       const invoice = await createTestInvoice(testCompany.id, {
         verifactu_type: INVOICE_TYPE.F1,
-        vat_id: 'F55555555'
+        vat_id: 'A82018474'
       });
 
       const company = await getCompany(testCompany.id);
@@ -353,7 +353,7 @@ describe('VeriFactu Unit Tests', () => {
     test('should build XML for voided invoice', async () => {
       const invoice = await createTestInvoice(testCompany.id, {
         verifactu_type: INVOICE_TYPE.F1,
-        vat_id: 'G66666666'
+        vat_id: 'A82018474'
       });
 
       const company = await getCompany(testCompany.id);
@@ -426,12 +426,12 @@ describe('VeriFactu AEAT Integration Tests', () => {
     itAEAT('should send F1 invoice to AEAT test environment', async () => {
       const invoice = await createTestInvoice(testCompany.id, {
         name: 'Cliente AEAT F1',
-        vat_id: '99999999R',
+        vat_id: 'A82018474',
         verifactu_type: INVOICE_TYPE.F1,
         lines: [
           { descr: 'Servicio de consultoría', units: 10, price: 50, vat: 21 }
         ]
-      });
+      }, true); // syncWithAEAT = true
 
       const company = await getCompany(testCompany.id);
       const result = await verifactu.submitInvoices(company, [invoice]);
@@ -459,7 +459,7 @@ describe('VeriFactu AEAT Integration Tests', () => {
         lines: [
           { descr: 'Venta simplificada', units: 2, price: 25, vat: 21 }
         ]
-      });
+      }, true); // syncWithAEAT = true
 
       const company = await getCompany(testCompany.id);
       const result = await verifactu.submitInvoices(company, [invoice]);
@@ -476,10 +476,10 @@ describe('VeriFactu AEAT Integration Tests', () => {
       // First send F1
       const f1Invoice = await createTestInvoice(testCompany.id, {
         name: 'Cliente para R1',
-        vat_id: '99999999R',
+        vat_id: 'A82018474',
         verifactu_type: INVOICE_TYPE.F1,
         lines: [{ descr: 'Servicio original', units: 1, price: 200, vat: 21 }]
-      });
+      }, true); // syncWithAEAT = true
 
       const company = await getCompany(testCompany.id);
       const f1Result = await verifactu.submitInvoices(company, [f1Invoice]);
@@ -499,12 +499,12 @@ describe('VeriFactu AEAT Integration Tests', () => {
       // Send R1 rectification
       const r1Invoice = await createTestInvoice(testCompany.id, {
         name: 'Cliente para R1',
-        vat_id: '99999999R',
+        vat_id: 'A82018474',
         verifactu_type: INVOICE_TYPE.R1,
         verifactu_stype: RECTIFICATION_TYPE.SUBSTITUTION,
         invoice_ref_id: f1Invoice.id,
         lines: [{ descr: 'Servicio corregido', units: 1, price: 180, vat: 21 }]
-      });
+      }, true); // syncWithAEAT = true
 
       const r1Result = await verifactu.submitInvoices(refreshedCompany, [r1Invoice]);
       console.log('R1 AEAT Result:', JSON.stringify(r1Result, null, 2));
@@ -519,10 +519,10 @@ describe('VeriFactu AEAT Integration Tests', () => {
       // Create and send invoice
       const invoice = await createTestInvoice(testCompany.id, {
         name: 'Cliente para Anulación',
-        vat_id: '99999999R',
+        vat_id: 'A82018474',
         verifactu_type: INVOICE_TYPE.F1,
         lines: [{ descr: 'Servicio a anular', units: 1, price: 75, vat: 21 }]
-      });
+      }, true); // syncWithAEAT = true
 
       const company = await getCompany(testCompany.id);
       const sendResult = await verifactu.submitInvoices(company, [invoice]);
