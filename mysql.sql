@@ -16,7 +16,9 @@ CREATE TABLE IF NOT EXISTS `companies` (
   `first_num` int(11) unsigned NOT NULL DEFAULT '1',
   `created` date NOT NULL,
   `next_send` datetime,
-  `test` tinyint(1) NOT NULL DEFAULT '1'
+  `test` tinyint(1) NOT NULL DEFAULT '1',
+  `cert_key` text,
+  `cert_content` text
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS `invoices` (

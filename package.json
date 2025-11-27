@@ -4,7 +4,12 @@
   "author": "Eduardo Ruiz <eruiz@dataclick.es> (https://www.dataclick.es)",
   "description": "Sistema de facturas Veri*Factu con envío a la AEAT",
   "keywords": [
-    "verifactu", "aeat", "Agencia Tributaria", "Facturación electrónica", "Sistema de emisión de facturas verificables", "Sistemas Informáticos de Facturación"
+    "verifactu",
+    "aeat",
+    "Agencia Tributaria",
+    "Facturación electrónica",
+    "Sistema de emisión de facturas verificables",
+    "Sistemas Informáticos de Facturación"
   ],
   "license": "MIT",
   "main": "api.js",
@@ -12,6 +17,11 @@
     "mysql2": "^3.11.0",
     "qr-image": "^3.2.0",
     "xml2js": "^0.6.2"
+  },
+  "devDependencies": {
+    "better-sqlite3": "^12.4.6",
+    "dotenv": "^16.3.1",
+    "jest": "^29.7.0"
   },
   "homepage": "https://github.com/EduardoRuizM/verifactu-api-nodejs",
   "bugs": {
@@ -23,6 +33,7 @@
   },
   "scripts": {
     "start": "node api.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest --runInBand --testTimeout=60000",
+    "test:integration": "jest --runInBand --testTimeout=120000 tests/integration"
   }
 }

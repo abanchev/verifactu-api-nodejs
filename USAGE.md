@@ -284,7 +284,16 @@ curl "http://localhost:8023/api/{TOKEN}/{COMPANY_ID}/query"
 
 ## Company Setup
 
-Before creating invoices, add a company to the database:
+Before creating invoices, add a company to the database with its certificate:
+
+### 1. Extract certificate from PKCS#12 file
+
+```bash
+openssl pkcs12 -in certificate.p12 -nocerts -nodes -out cert_key.pem
+openssl pkcs12 -in certificate.p12 -clcerts -nokeys -out cert_content.pem
+```
+
+### 2. Insert company with certificate
 
 ```sql
 INSERT INTO companies SET
@@ -300,8 +309,16 @@ INSERT INTO companies SET
   formula_r = 'R-%Y%/%n.5%',
   first_num = 1,
   created = CURRENT_DATE,
-  test = 1;
+  test = 1,
+  cert_key = '-----BEGIN PRIVATE KEY-----
+...content from cert_key.pem...
+-----END PRIVATE KEY-----',
+  cert_content = '-----BEGIN CERTIFICATE-----
+...content from cert_content.pem...
+-----END CERTIFICATE-----';
 ```
+
+Each company requires its own digital certificate for AEAT communication.
 
 ### Invoice Number Formulas
 
@@ -369,8 +386,6 @@ services:
 | `MYSQL_NAME` | **Yes** | - | Database name |
 | `MYSQL_USER` | **Yes** | - | Database user |
 | `MYSQL_PASS` | **Yes** | - | Database password |
-| `KEY_CONTENT` | **Yes** | - | Private key PEM content |
-| `CERT_CONTENT` | **Yes** | - | Certificate PEM content |
 | `SOFTWARE_COMPANY_NAME` | **Yes** | - | Your company name |
 | `SOFTWARE_COMPANY_NIF` | **Yes** | - | Your company VAT ID |
 | `SOFTWARE_NAME` | No | verifactu | Software name |

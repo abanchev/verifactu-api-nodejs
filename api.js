@@ -27,6 +27,9 @@ const crypto = require('crypto');
 const backserver = require('./backserver');
 const verifactuxml = require('./verifactu.xml');
 
+// Import VeriFactu constants
+const { INVOICE_TYPE, RECTIFICATION_TYPE } = verifactuxml;
+
 // Read configuration from environment variables
 const cfg = {
   // Database
@@ -36,10 +39,6 @@ const cfg = {
   mysql_user: process.env.MYSQL_USER,
   mysql_pass: process.env.MYSQL_PASS,
   timezone: process.env.TIMEZONE || 'Europe/Madrid',
-
-  // Certificate content (PEM format)
-  key_content: process.env.KEY_CONTENT,
-  cert_content: process.env.CERT_CONTENT,
 
   // Software info
   software_company_name: process.env.SOFTWARE_COMPANY_NAME,
@@ -56,8 +55,8 @@ const cfg = {
   process_interval: process.env.PROCESS_INTERVAL
 };
 
-// Validate required config
-const required = ['mysql_name', 'mysql_user', 'mysql_pass', 'key_content', 'cert_content', 'software_company_name', 'software_company_nif'];
+// Validate required config (certificates are now optional at global level - can be per-company)
+const required = ['mysql_name', 'mysql_user', 'mysql_pass', 'software_company_name', 'software_company_nif'];
 const missing = required.filter(k => !cfg[k]);
 if(missing.length) {
   console.error('Missing required environment variables:', missing.join(', '));
@@ -129,8 +128,6 @@ async function lastId() {
 
 const verifactu = verifactuxml({
   query: query,
-  key_content: cfg.key_content,
-  cert_content: cfg.cert_content,
   software_company_name: cfg.software_company_name,
   software_company_nif: cfg.software_company_nif,
   software_name: cfg.software_name,
@@ -184,12 +181,12 @@ async function checkAccess(req, res) {
 // Procesar facturas para la AEAT
 app.get('/api/:backend_token/process', async (req, res) => {
   if(await checkAccess(req, res))
-    req.content = await verifactu.pending();
+    req.content = await verifactu.processPendingInvoices();
 });
 
 app.get('/api/:backend_token/:company_id/query', async (req, res) => {
   if(await checkAccess(req, res))
-    req.content = await verifactu.Consulta(app.company, req.getparams.get('year'), req.getparams.get('month'));
+    req.content = await verifactu.queryRecords(app.company, req.getparams.get('year'), req.getparams.get('month'));
 });
 
 app.get('/api/:backend_token/:company_id/invoices', async (req, res) => {
@@ -197,7 +194,7 @@ app.get('/api/:backend_token/:company_id/invoices', async (req, res) => {
     req.content.data = await dbQuery(req, res, "SELECT *, CONVERT_TZ(verifactu_dt, 'UTC', ?) AS verifactu_dt_local FROM invoices WHERE company_id = ? ORDER BY dt", [cfg.timezone, req.params.company_id]);
 
     if(req.content.data)
-      req.content.data.forEach(item => item.number_format = verifactu.numFmt(app.company, item));
+      req.content.data.forEach(item => item.number_format = verifactu.formatInvoiceNumber(app.company, item));
   }
 });
 
@@ -207,7 +204,7 @@ app.get('/api/:backend_token/:company_id/invoices/:id', async (req, res) => {
     if(!invoice)
       return;
 
-    invoice.number_format = verifactu.numFmt(app.company, invoice);
+    invoice.number_format = verifactu.formatInvoiceNumber(app.company, invoice);
     invoice.lines = await dbQuery(req, res, 'SELECT * FROM invoice_lines WHERE invoice_id = ? ORDER BY num', req.params.id);
     req.content = invoice;
   }
@@ -244,7 +241,7 @@ async function insertInvoice(req, res, type, ref = null, stype = null) {
 
   if(await dbQuery(req, res,	'INSERT INTO invoices SET company_id = ?, dt = CURRENT_TIMESTAMP, num = ?, name = ?, vat_id = ?, address = ?, postal_code = ?, city = ?, ' +
 				'state = ?, country = ?, tvat = ?, bi = ?, total = ?, email = ?, ref = ?, comments = ?, verifactu_type = ?, verifactu_stype = ?, invoice_ref_id = ?',
-				[req.params.company_id, await nextNum(type), req.body.name.trim(), (req.body.vat_id) ? verifactu.cod(req.body.vat_id) : null,
+				[req.params.company_id, await nextNum(type), req.body.name.trim(), (req.body.vat_id) ? verifactu.normalizeNif(req.body.vat_id) : null,
 				(req.body.address) ? req.body.address.trim() : null, (req.body.postal_code) ? req.body.postal_code.trim() : null,
 				(req.body.city) ? req.body.city.trim() : null, (req.body.state) ? req.body.state.trim() : null, req.body.country,
 				tvat, bi, total, (req.body.email) ? req.body.email.trim() : null, (req.body.ref) ? req.body.ref.trim() : null,
@@ -271,7 +268,7 @@ async function insertInvoice(req, res, type, ref = null, stype = null) {
 
 app.post('/api/:backend_token/:company_id/invoices', async (req, res) => {
   if(await checkAccess(req, res))
-    await insertInvoice(req, res, (req.body.vat_id) ? 'F1' : 'F2');
+    await insertInvoice(req, res, (req.body.vat_id) ? INVOICE_TYPE.F1 : INVOICE_TYPE.F2);
 });
 
 app.post('/api/:backend_token/:company_id/invoices/:id/rect', async (req, res) => {
@@ -279,13 +276,13 @@ app.post('/api/:backend_token/:company_id/invoices/:id/rect', async (req, res) =
     return;
 
   const invoice = await getElm(req, res, 'SELECT * FROM invoices WHERE id = ? AND company_id = ?', [req.params.id, req.params.company_id]);
-  if(!invoice || !(['F1', 'F2', 'F3'].includes(invoice.verifactu_type)) || invoice.voided) {
+  if(!invoice || !([INVOICE_TYPE.F1, INVOICE_TYPE.F2, INVOICE_TYPE.F3].includes(invoice.verifactu_type)) || invoice.voided) {
     req.status = 401;
-    req.content.error = 'Not exists, not type F1/F2/F3 or voided: ' + verifactu.numFmt(app.company, invoice);
+    req.content.error = 'Not exists, not type F1/F2/F3 or voided: ' + verifactu.formatInvoiceNumber(app.company, invoice);
     return;
   }
 
-  await insertInvoice(req, res, (req.body.vat_id) ? 'R1' : 'R5', invoice.id, 'I');
+  await insertInvoice(req, res, (req.body.vat_id) ? INVOICE_TYPE.R1 : INVOICE_TYPE.R5, invoice.id, RECTIFICATION_TYPE.INCREMENTAL);
 });
 
 app.post('/api/:backend_token/:company_id/invoices/:id/rect2', async (req, res) => {
@@ -293,13 +290,13 @@ app.post('/api/:backend_token/:company_id/invoices/:id/rect2', async (req, res) 
     return;
 
   const invoice = await getElm(req, res, 'SELECT * FROM invoices WHERE id = ? AND company_id = ?', [req.params.id, req.params.company_id]);
-  if(!invoice || !(['F1', 'F3'].includes(invoice.verifactu_type)) || invoice.voided) {
+  if(!invoice || !([INVOICE_TYPE.F1, INVOICE_TYPE.F3].includes(invoice.verifactu_type)) || invoice.voided) {
     req.status = 401;
-    req.content.error = 'Not exists, not type F1/F3 or voided: ' + verifactu.numFmt(app.company, invoice);
+    req.content.error = 'Not exists, not type F1/F3 or voided: ' + verifactu.formatInvoiceNumber(app.company, invoice);
     return;
   }
 
-  await insertInvoice(req, res, 'R2', invoice.id, 'I');
+  await insertInvoice(req, res, INVOICE_TYPE.R2, invoice.id, RECTIFICATION_TYPE.INCREMENTAL);
 });
 
 app.post('/api/:backend_token/:company_id/invoices/:id/rectsust', async (req, res) => {
@@ -307,13 +304,13 @@ app.post('/api/:backend_token/:company_id/invoices/:id/rectsust', async (req, re
     return;
 
   const invoice = await getElm(req, res, 'SELECT * FROM invoices WHERE id = ? AND company_id = ?', [req.params.id, req.params.company_id]);
-  if(!invoice || !(['F1', 'F2', 'F3', 'R1', 'R5'].includes(invoice.verifactu_type)) || invoice.voided) {
+  if(!invoice || !([INVOICE_TYPE.F1, INVOICE_TYPE.F2, INVOICE_TYPE.F3, INVOICE_TYPE.R1, INVOICE_TYPE.R5].includes(invoice.verifactu_type)) || invoice.voided) {
     req.status = 401;
-    req.content.error = 'Not exists, not type F1/F2/F3/R1/R5 or voided: ' + verifactu.numFmt(app.company, invoice);
+    req.content.error = 'Not exists, not type F1/F2/F3/R1/R5 or voided: ' + verifactu.formatInvoiceNumber(app.company, invoice);
     return;
   }
 
-  await insertInvoice(req, res, (req.body.vat_id) ? 'R1' : 'R5', invoice.id, 'S');
+  await insertInvoice(req, res, (req.body.vat_id) ? INVOICE_TYPE.R1 : INVOICE_TYPE.R5, invoice.id, RECTIFICATION_TYPE.SUBSTITUTION);
 });
 
 app.post('/api/:backend_token/:company_id/invoices/:id/sust', async (req, res) => {
@@ -321,13 +318,13 @@ app.post('/api/:backend_token/:company_id/invoices/:id/sust', async (req, res) =
     return;
 
   const invoice = await getElm(req, res, 'SELECT * FROM invoices WHERE id = ? AND company_id = ?', [req.params.id, req.params.company_id]);
-  if(!invoice || invoice.verifactu_type != 'F2' || invoice.voided) {
+  if(!invoice || invoice.verifactu_type !== INVOICE_TYPE.F2 || invoice.voided) {
     req.status = 401;
-    req.content.error = 'Not exists, not type F2 or voided: ' + verifactu.numFmt(app.company, invoice);
+    req.content.error = 'Not exists, not type F2 or voided: ' + verifactu.formatInvoiceNumber(app.company, invoice);
     return;
   }
 
-  await insertInvoice(req, res, 'F3', invoice.id);
+  await insertInvoice(req, res, INVOICE_TYPE.F3, invoice.id);
 });
 
 app.get('/api/:backend_token/:company_id/invoices/:id/qr', async (req, res) => {
@@ -336,7 +333,7 @@ app.get('/api/:backend_token/:company_id/invoices/:id/qr', async (req, res) => {
     if(!invoice)
       return;
 
-    invoice.number_format = verifactu.numFmt(app.company, invoice);
+    invoice.number_format = verifactu.formatInvoiceNumber(app.company, invoice);
     res.sendHeaders['Content-Type'] = 'image/png';
     req.raw = getQR(app.company, invoice);
   }
@@ -356,13 +353,13 @@ app.put('/api/:backend_token/:company_id/invoices/:id/voided', async (req, res) 
   for(const invoice of invoices) {
     if(invoice.voided || !invoice.verifactu_dt || invoice.invoice_ref_id) {
       req.status = 401;
-      req.content.error = 'Already voided, not sent or referenced: ' + verifactu.numFmt(app.company, invoice);
+      req.content.error = 'Already voided, not sent or referenced: ' + verifactu.formatInvoiceNumber(app.company, invoice);
       return;
     }
   }
 
   if(invoices)
-    req.content = await verifactu.voided(app.company, invoices);
+    req.content = await verifactu.voidInvoices(app.company, invoices);
   else
     req.status = 404;
 });
@@ -383,7 +380,7 @@ function getUrlAEAT() {
 
 // Código QR de la factura
 function getQR(company, invoice) {
-  const url =	getUrlAEAT() + 'wlpl/TIKE-CONT/ValidarQR?nif=' + encodeURIComponent(app.company.vat_id) + '&numserie=' + encodeURIComponent(verifactu.numFmt(company, invoice)) +
+  const url =	getUrlAEAT() + 'wlpl/TIKE-CONT/ValidarQR?nif=' + encodeURIComponent(app.company.vat_id) + '&numserie=' + encodeURIComponent(verifactu.formatInvoiceNumber(company, invoice)) +
 		'&fecha=' + encodeURIComponent(new Date(invoice.dt).toLocaleDateString('en-GB')) + '&importe=' + encodeURIComponent(invoice.total);
 
   const qr = require('qr-image');
@@ -398,7 +395,7 @@ const PROCESS_INTERVAL = cfg.process_interval ? parseInt(cfg.process_interval, 1
 if(PROCESS_INTERVAL > 0) {
   setInterval(async () => {
     try {
-      const result = await verifactu.pending();
+      const result = await verifactu.processPendingInvoices();
       const hasInvoices = Object.values(result.companies || {}).some(c => c.ok?.length || c.ko?.length);
       if(hasInvoices)
         console.log('Auto-process result:', JSON.stringify(result));

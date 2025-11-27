@@ -95,8 +95,6 @@ Se crearán las tablas necesarias y una empresa de prueba.
 | backend_cert | String | - | - | Ruta/Archivo certificado para HTTPS |
 | backend_key | String | - | - | Ruta/Archivo clave privada para HTTPS |
 | backend_token | String | ✔ | (automático) | Token para llamadas a la API |
-| key_file | String | ✔ | - | Archivo clave privada certificado digital |
-| cert_file | String | ✔ | - | Archivo PEM certificado digital |
 | software_company_name | String | ✔ | - | Nombre/razón desarrollador |
 | software_company_nif | String | ✔ | - | NIF desarrollador |
 | software_name | String | ✔ | verifactu | Nombre sistema informático |
@@ -111,18 +109,22 @@ Se crearán las tablas necesarias y una empresa de prueba.
 ⚠️ Después de la primera ejecución se añadirá (si no existe) el valor de **backend_token** que se utilizará para las llamadas a la API.
 #### **Consulta luego este valor para hacer las peticiones.**
 
-### 4. Extraer clave privada y certificado para `key_file` y `cert_file`
+### 4. Extraer clave privada y certificado para cada empresa
 NodeJS no soporta certificados en archivos PKCS#12, por lo que hay que extraer la clave privada y el certificado PEM:
 ```
 openssl pkcs12 -in miCertificadoFNMT.p12 -nocerts -nodes -out cert_key.pem
 openssl pkcs12 -in miCertificadoFNMT.p12 -clcerts -nokeys -out cert.pem
 ```
-Archivo `verifactu.conf`:
-```
-...
-key_file=cert_key.pem
-cert_file=cert.pem
-...
+El contenido de estos archivos se debe almacenar en la base de datos para cada empresa en los campos `cert_key` y `cert_content` de la tabla `companies`:
+```sql
+UPDATE companies SET
+  cert_key = '-----BEGIN PRIVATE KEY-----
+...contenido de cert_key.pem...
+-----END PRIVATE KEY-----',
+  cert_content = '-----BEGIN CERTIFICATE-----
+...contenido de cert.pem...
+-----END CERTIFICATE-----'
+WHERE id = 1;
 ```
 
 ### 5. Instala las dependencias (MySQL + qr-image + xml2js)
@@ -173,6 +175,8 @@ Empresas para el sistema de facturación independiente y envío a AEAT.
 | created | Creado | Date | ✔ | (fecha actual) | Fecha creación |
 | next_send | Siguiente envío | DateTime | - | - | Fecha permitida del siguiente envío a la AEAT |
 | test | Empresa de prueba | Bool | ✔ | ✅ | Para realizar pruebas y enviar las facturas al sistema de pruebas de la AEAT |
+| cert_key | Clave privada | Text | ✔ | - | Contenido PEM de la clave privada del certificado digital |
+| cert_content | Certificado | Text | ✔ | - | Contenido PEM del certificado digital |
 
 - Variables para **Fórmula**:
 %n% = Número de la factura (sin ceros iniciales)
