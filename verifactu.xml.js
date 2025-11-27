@@ -5,21 +5,15 @@
 // https://github.com/EduardoRuizM/verifactu-api-nodejs
 //
 
-const fs = require('fs');
-const tls = require('tls');
-const path = require('path');
 const https = require('https');
 const crypto = require('crypto');
 const xml2js = require('xml2js');
-const { promisify } = require('util');
 
 class VeriFactuXML {
   constructor(options) {
     this.query = options.query;
-    this.key_file = options.key_file;
-    this.cert_file = options.cert_file;
-    this.log_file = options.log_file;
-    this.save_responses = options.save_responses;
+    this.key_content = options.key_content;
+    this.cert_content = options.cert_content;
     this.software_company_name = options.software_company_name;
     this.software_company_nif = this.cod(options.software_company_nif);
     this.software_name = options.software_name;
@@ -57,16 +51,7 @@ class VeriFactuXML {
   // Logs
   addLog(txt) {
     const d = (new Date()).toISOString().substring(0, 19).replace('T', ' ');
-    try {
-
-      console.error(txt);
-      if(this.log_file)
-        fs.appendFileSync(process.cwd() + path.sep + this.log_file, `${d} ${txt}\n`);
-
-    } catch(e) {
-
-      console.error('Unable to save log file', e.message);
-    }
+    console.log(`[${d}] ${txt}`);
   }
 
   // Última factura enviada a la AEAT
@@ -275,9 +260,6 @@ class VeriFactuXML {
              </soapenv:Body>
            </soapenv:Envelope>`;
 
-    if(this.save_responses && fs.existsSync(this.save_responses) && fs.statSync(this.save_responses).isDirectory())
-      fs.writeFileSync(this.save_responses + '/send_' + this.dtnow() + '.xml', xml);
-
     let ret = await this.sendXML(company, xml);
     if(ret.status !== 200 || ret.error) {
       this.addLog('Unable to connect, status=' + ret.status + ', error=' + ret.error);
@@ -315,8 +297,6 @@ class VeriFactuXML {
 
 	for(const line of lines) {
 	  const numSerieFactura = line?.IDFactura?.NumSerieFactura;
-	  const tipoOperacion = line?.Operacion?.TipoOperacion;
-	  const estadoRegistro = line?.EstadoRegistro;
 	  const codError = line?.CodigoErrorRegistro ?? 0;
 	  const descrError = line?.DescripcionErrorRegistro;
 
@@ -326,17 +306,21 @@ class VeriFactuXML {
 	    continue;
 	  }
 
-	  let sql = `UPDATE invoices SET verifactu_dt = "${dtutc}", verifactu_err = ${+codError}`;
+	  const updateFields = {
+	    verifactu_dt: dtutc,
+	    verifactu_err: +codError
+	  };
+
 	  if(csv)
-	    sql+= `, verifactu_csv = "${((invoice.verifactu_csv || '') + "\n" + csv).replace(/"/g, '\\"').trim()}"`;
+	    updateFields.verifactu_csv = ((invoice.verifactu_csv || '') + "\n" + csv).trim();
 
 	  if(timestampPresentacion)
-	    sql+= ', fingerprint = "' + this.fingerprint(company, invoice, invoice._prev, timestampPresentacion, voided) + '"';
+	    updateFields.fingerprint = this.fingerprint(company, invoice, invoice._prev, timestampPresentacion, voided);
 
 	  if(!codError && voided)
-	    sql+= ', voided = 1';
+	    updateFields.voided = 1;
 
-	  await this.query(sql + ' WHERE id = ' + invoice.id);
+	  await this.query('UPDATE invoices SET ? WHERE id = ?', [updateFields, invoice.id]);
 
 	  if(codError)
 	    sret.ko.push({id: invoice.id, num: numSerieFactura, codError: codError, descrError: descrError});
@@ -385,7 +369,7 @@ class VeriFactuXML {
                  </soapenv:Body>
                </soapenv:Envelope>`;
 
-    let ret = await this.sendXML(company, xml, false);
+    let ret = await this.sendXML(company, xml);
     if(ret.status !== 200 || ret.error)
       return ret;
 
@@ -402,52 +386,42 @@ class VeriFactuXML {
     });
   }
 
-  dtnow() {
-    return new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '');
-  }
-
   // Enviar a la AEAT (pruebas o producción)
-  async sendXML(company, xml, log = true) {
+  async sendXML(company, xml) {
     try {
-      const key = fs.readFileSync(this.key_file, 'utf8');
-      const cert = fs.readFileSync(this.cert_file, 'utf8');
-
       const url = new URL((company.test) ? this.url_test : this.url_prod);
       const options = {
-	hostname: url.hostname,
-	port: url.port || 443,
-	path: url.pathname + url.search,
-	method: 'POST',
-	key: key,
-	cert: cert,
-	rejectUnauthorized: false,
-	headers: {
-	  'Content-Type': 'application/xml',
-	  'Content-Length': Buffer.byteLength(xml),
-	},
+        hostname: url.hostname,
+        port: url.port || 443,
+        path: url.pathname + url.search,
+        method: 'POST',
+        key: this.key_content,
+        cert: this.cert_content,
+        rejectUnauthorized: false,
+        headers: {
+          'Content-Type': 'application/xml',
+          'Content-Length': Buffer.byteLength(xml),
+        },
       };
 
       return new Promise((resolve, reject) => {
-	const req = https.request(options, res => {
-	  let data = '', status = res.statusCode;
+        const req = https.request(options, res => {
+          let data = '', status = res.statusCode;
 
-	  res.on('data', chunk => {
-	    data+= chunk;
-	  });
+          res.on('data', chunk => {
+            data+= chunk;
+          });
 
-	  res.on('end', () => {
-	    if(log && this.save_responses && fs.existsSync(this.save_responses) && fs.statSync(this.save_responses).isDirectory())
-	      fs.writeFileSync(this.save_responses + '/resp_' + this.dtnow() + '.xml', data);
+          res.on('end', () => {
+            resolve({status: status, response: data});
+          });
+        });
 
-	    resolve({status: status, response: data});
- 	  });
-	});
+        req.on('error', err => {
+          reject({status: 0, error: err});
+        });
 
-	req.on('error', err => {
-	  reject({status: status, error: err});
-	});
-
-	req.write(xml);
+        req.write(xml);
         req.end();
       });
     } catch (err) {

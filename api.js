@@ -22,49 +22,73 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE
 
-const fs = require('fs');
-const path = require('path');
-const util = require('util');
-const mysql = require('mysql');
+const mysql = require('mysql2/promise');
 const crypto = require('crypto');
 const backserver = require('./backserver');
 const verifactuxml = require('./verifactu.xml');
 
-const fcfg = process.cwd() + path.sep + 'verifactu.conf';
+// Read configuration from environment variables
+const cfg = {
+  // Database
+  mysql_host: process.env.MYSQL_HOST || '127.0.0.1',
+  mysql_port: process.env.MYSQL_PORT || 3306,
+  mysql_name: process.env.MYSQL_NAME,
+  mysql_user: process.env.MYSQL_USER,
+  mysql_pass: process.env.MYSQL_PASS,
+  timezone: process.env.TIMEZONE || 'Europe/Madrid',
 
-// Leer y asignar configuración
-let cfg = {};
-try {
+  // Certificate content (PEM format)
+  key_content: process.env.KEY_CONTENT,
+  cert_content: process.env.CERT_CONTENT,
 
-  fs.readFileSync(fcfg).toString().replace(/\r/g, '').split('\n').map(c => c).forEach((l) => {
-    l = l.split('=');
-    if(l.length === 2)
-      cfg[l[0].trim()] = l[1].trim();
-  });
+  // Software info
+  software_company_name: process.env.SOFTWARE_COMPANY_NAME,
+  software_company_nif: process.env.SOFTWARE_COMPANY_NIF,
+  software_name: process.env.SOFTWARE_NAME || 'verifactu',
+  software_id: process.env.SOFTWARE_ID || 'vf',
+  software_version: process.env.SOFTWARE_VERSION || '1.0',
+  software_install_number: process.env.SOFTWARE_INSTALL_NUMBER || '00001',
 
-  if(!cfg.backend_url || !cfg.mysql_name || !cfg.mysql_user || !cfg.mysql_pass)
-    throw new Error('No URL or database config for VeriFactu');
+  // Server
+  backend_url: process.env.BACKEND_URL || 'http://0.0.0.0:8023',
+  backend_token: process.env.BACKEND_TOKEN,
+  allow_ip: process.env.ALLOW_IP,
+  process_interval: process.env.PROCESS_INTERVAL
+};
 
-  if(!cfg.key_file || !cfg.cert_file)
-    throw new Error('Key or certificate not found for VeriFactu');
-
-  if(!cfg.software_company_name || !cfg.software_company_nif || !cfg.software_name || !cfg.software_id || !cfg.software_version || !cfg.software_install_number)
-    throw new Error('Software info not found for VeriFactu');
-
-} catch(err) {
-
-  console.error('Error', err.message);
+// Validate required config
+const required = ['mysql_name', 'mysql_user', 'mysql_pass', 'key_content', 'cert_content', 'software_company_name', 'software_company_nif'];
+const missing = required.filter(k => !cfg[k]);
+if(missing.length) {
+  console.error('Missing required environment variables:', missing.join(', '));
   process.exit(1);
 }
 
+// Generate token if not provided
 if(!cfg.backend_token) {
   cfg.backend_token = crypto.randomBytes(60).toString('base64').replace(/[\/+]/g, '0').substring(0, 60);
-  fs.appendFileSync(fcfg, `backend_token=${cfg.backend_token}\n`);
+  console.log('Generated BACKEND_TOKEN:', cfg.backend_token);
 }
 
-// Database
-const db = mysql.createConnection({host: cfg.mysql_host || '127.0.0.1', user: cfg.mysql_user, password: cfg.mysql_pass, database: cfg.mysql_name, port: cfg.mysql_port || 3306});
-const query = util.promisify(db.query).bind(db);
+// Database connection pool
+const pool = mysql.createPool({
+  host: cfg.mysql_host,
+  port: cfg.mysql_port,
+  user: cfg.mysql_user,
+  password: cfg.mysql_pass,
+  database: cfg.mysql_name,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0
+});
+
+// Use query() instead of execute() to support object syntax (SET ?)
+const query = async (sql, params) => {
+  const [rows] = await pool.query(sql, params);
+  return rows;
+};
 
 // SQL
 async function dbQuery(req, res, q, v) {
@@ -103,15 +127,38 @@ async function lastId() {
   return (result.length) ? result[0].id : 0;
 }
 
-const verifactu = verifactuxml({query: query, key_file: cfg.key_file, cert_file: cfg.cert_file, log_file: cfg.verifactu_log_file, save_responses: cfg.verifactu_save_responses,
-				software_company_name: cfg.software_company_name, software_company_nif: cfg.software_company_nif, software_name: cfg.software_name,
-				software_id: cfg.software_id, software_version: cfg.software_version, software_install_number: cfg.software_install_number});
+const verifactu = verifactuxml({
+  query: query,
+  key_content: cfg.key_content,
+  cert_content: cfg.cert_content,
+  software_company_name: cfg.software_company_name,
+  software_company_nif: cfg.software_company_nif,
+  software_name: cfg.software_name,
+  software_id: cfg.software_id,
+  software_version: cfg.software_version,
+  software_install_number: cfg.software_install_number
+});
 
-const app = backserver({ipv6: cfg.ipv6, url: cfg.backend_url, cert: cfg.backend_cert, key: cfg.backend_key})
-		.on('listening', address => console.log('Dataclick VeriFactu API', address))
-		.on('error', err => console.error(err));
+const app = backserver({url: cfg.backend_url})
+  .on('listening', address => console.log('Dataclick VeriFactu API', address))
+  .on('error', err => console.error(err));
 
-cfg.timezone = cfg.timezone ?? 'Europe/Madrid';
+// Health check endpoint (no auth required)
+app.get('/health', async (req, res) => {
+  try {
+    await query('SELECT 1');
+    req.content = {status: 'ok', timestamp: new Date().toISOString()};
+  } catch(err) {
+    req.status = 503;
+    req.content = {status: 'error', error: 'Database connection failed'};
+  }
+});
+
+// Constant-time string comparison to prevent timing attacks
+function secureCompare(a, b) {
+  if(!a || !b || a.length !== b.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
 
 async function checkAccess(req, res) {
   if(cfg.allow_ip && cfg.allow_ip !== req.ip) {
@@ -120,10 +167,10 @@ async function checkAccess(req, res) {
     return false;
   }
 
-  // Comprobar token
-  if(!cfg.backend_token || cfg.backend_token !== req.params.backend_token) {
+  // Comprobar token (constant-time comparison)
+  if(!cfg.backend_token || !secureCompare(cfg.backend_token, req.params.backend_token)) {
     req.status = 401;
-    req.content.error = 'Missing or wrong token' + cfg.backend_token;
+    req.content.error = 'Missing or wrong token';
     return false;
   }
 
@@ -175,7 +222,6 @@ async function insertInvoice(req, res, type, ref = null, stype = null) {
     return;
   }
 
-  const num = n => {const p = parseInt(n, 10); return isNaN(p) ? 0 : p;};
   const numdec = n => {const p = parseFloat(n); return isNaN(p) ? 0 : Number(p.toFixed(2));};
 
   let tvat = 0, bi = 0, total = 0;
@@ -206,22 +252,22 @@ async function insertInvoice(req, res, type, ref = null, stype = null) {
 
     let id = await lastId();
     let num = 0;
-    req.body.lines.forEach(line => {
+    for(const line of req.body.lines) {
       num++;
       tvat = total = 0;
       bi = numdec((line.units || 1) * line.price);
       if(line.vat) {
-	tvat = numdec(bi * (line.vat / 100));
-	total = numdec(bi + tvat);
+        tvat = numdec(bi * (line.vat / 100));
+        total = numdec(bi + tvat);
       }
-      dbQuery(req, res,	'INSERT INTO invoice_lines SET invoice_id = ?, num = ?, descr = ?, units = ?, price = ?, vat = ?, tvat = ?, bi = ?, total = ?',
-			[id, num, line.descr, line.units, line.price, line.vat, tvat, bi, total]);
-    });
+      await dbQuery(req, res, 'INSERT INTO invoice_lines SET invoice_id = ?, num = ?, descr = ?, units = ?, price = ?, vat = ?, tvat = ?, bi = ?, total = ?',
+        [id, num, line.descr, line.units, line.price, line.vat, tvat, bi, total]);
+    }
 
     req.status = 201;
     req.content.id = id;
   }
-};
+}
 
 app.post('/api/:backend_token/:company_id/invoices', async (req, res) => {
   if(await checkAccess(req, res))
@@ -345,3 +391,36 @@ function getQR(company, invoice) {
 }
 
 app.createServer();
+
+// Auto-process pending invoices every minute
+const PROCESS_INTERVAL = cfg.process_interval ? parseInt(cfg.process_interval, 10) * 1000 : 60000;
+
+if(PROCESS_INTERVAL > 0) {
+  setInterval(async () => {
+    try {
+      const result = await verifactu.pending();
+      const hasInvoices = Object.values(result.companies || {}).some(c => c.ok?.length || c.ko?.length);
+      if(hasInvoices)
+        console.log('Auto-process result:', JSON.stringify(result));
+    } catch(err) {
+      console.error('Auto-process error:', err.message);
+    }
+  }, PROCESS_INTERVAL);
+
+  console.log(`Auto-processing enabled: every ${PROCESS_INTERVAL / 1000} seconds`);
+}
+
+// Graceful shutdown
+async function shutdown(signal) {
+  console.log(`${signal} received, shutting down gracefully...`);
+  try {
+    await pool.end();
+    console.log('Database pool closed');
+  } catch(err) {
+    console.error('Error closing pool:', err.message);
+  }
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
