@@ -1,34 +1,31 @@
 # VeriFactu API Usage Guide
 
-## Quick Start
+## Production API
 
-After deployment, the API is available at `http://localhost:8023` (or your configured URL).
-
-### Get Your API Token
-
-On first startup, if `BACKEND_TOKEN` is not set, one will be generated and printed to the console:
+The VeriFactu API is deployed at:
 
 ```
-Generated BACKEND_TOKEN: abc123...
+https://verifactu.investhinks.com
 ```
 
-Save this token - you'll need it for all API calls.
+### Authentication
 
-## Authentication
-
-All API endpoints (except `/health`) require the token in the URL path:
+All API endpoints (except `/health`) require an authentication token in the URL path:
 
 ```
-/api/{TOKEN}/...
+https://verifactu.investhinks.com/api/{TOKEN}/{COMPANY_ID}/...
 ```
+
+Contact your administrator to obtain your `TOKEN` and `COMPANY_ID`.
+
+---
 
 ## Endpoints
 
 ### Health Check
 
 ```bash
-# No authentication required
-curl http://localhost:8023/health
+curl https://verifactu.investhinks.com/health
 ```
 
 **Response:**
@@ -38,10 +35,10 @@ curl http://localhost:8023/health
 
 ### Process Pending Invoices
 
-Sends all pending invoices to AEAT. Called automatically every minute if `PROCESS_INTERVAL > 0`.
+Sends all pending invoices to AEAT. Called automatically every minute.
 
 ```bash
-curl http://localhost:8023/api/{TOKEN}/process
+curl https://verifactu.investhinks.com/api/{TOKEN}/process
 ```
 
 **Response:**
@@ -63,7 +60,7 @@ curl http://localhost:8023/api/{TOKEN}/process
 ### List All Invoices
 
 ```bash
-curl http://localhost:8023/api/{TOKEN}/{COMPANY_ID}/invoices
+curl https://verifactu.investhinks.com/api/{TOKEN}/{COMPANY_ID}/invoices
 ```
 
 **Response:**
@@ -86,7 +83,7 @@ curl http://localhost:8023/api/{TOKEN}/{COMPANY_ID}/invoices
 ### Get Single Invoice
 
 ```bash
-curl http://localhost:8023/api/{TOKEN}/{COMPANY_ID}/invoices/{INVOICE_ID}
+curl https://verifactu.investhinks.com/api/{TOKEN}/{COMPANY_ID}/invoices/{INVOICE_ID}
 ```
 
 **Response:**
@@ -107,7 +104,7 @@ curl http://localhost:8023/api/{TOKEN}/{COMPANY_ID}/invoices/{INVOICE_ID}
 ### Create Invoice
 
 ```bash
-curl -X POST http://localhost:8023/api/{TOKEN}/{COMPANY_ID}/invoices \
+curl -X POST https://verifactu.investhinks.com/api/{TOKEN}/{COMPANY_ID}/invoices \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Client Name",
@@ -126,7 +123,7 @@ curl -X POST http://localhost:8023/api/{TOKEN}/{COMPANY_ID}/invoices \
   }'
 ```
 
-**Invoice Types:**
+**Invoice Types (automatic):**
 - With `vat_id` → Creates **F1** (standard invoice)
 - Without `vat_id` → Creates **F2** (simplified invoice)
 
@@ -137,10 +134,10 @@ curl -X POST http://localhost:8023/api/{TOKEN}/{COMPANY_ID}/invoices \
 
 ### Get Invoice QR Code
 
-Returns a PNG image for invoice verification.
+Returns a PNG image for AEAT invoice verification.
 
 ```bash
-curl http://localhost:8023/api/{TOKEN}/{COMPANY_ID}/invoices/{INVOICE_ID}/qr \
+curl https://verifactu.investhinks.com/api/{TOKEN}/{COMPANY_ID}/invoices/{INVOICE_ID}/qr \
   --output invoice_qr.png
 ```
 
@@ -153,8 +150,7 @@ curl http://localhost:8023/api/{TOKEN}/{COMPANY_ID}/invoices/{INVOICE_ID}/qr \
 Creates a rectification that replaces the original invoice values.
 
 ```bash
-# Rectify invoice ID 5
-curl -X POST http://localhost:8023/api/{TOKEN}/{COMPANY_ID}/invoices/5/rect \
+curl -X POST https://verifactu.investhinks.com/api/{TOKEN}/{COMPANY_ID}/invoices/{INVOICE_ID}/rect \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Client Name",
@@ -173,7 +169,7 @@ curl -X POST http://localhost:8023/api/{TOKEN}/{COMPANY_ID}/invoices/5/rect \
 Creates a rectification showing only the difference.
 
 ```bash
-curl -X POST http://localhost:8023/api/{TOKEN}/{COMPANY_ID}/invoices/5/rect2 \
+curl -X POST https://verifactu.investhinks.com/api/{TOKEN}/{COMPANY_ID}/invoices/{INVOICE_ID}/rect2 \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Client Name",
@@ -189,7 +185,7 @@ curl -X POST http://localhost:8023/api/{TOKEN}/{COMPANY_ID}/invoices/5/rect2 \
 Replaces a simplified invoice (F2) with a full invoice.
 
 ```bash
-curl -X POST http://localhost:8023/api/{TOKEN}/{COMPANY_ID}/invoices/5/sust \
+curl -X POST https://verifactu.investhinks.com/api/{TOKEN}/{COMPANY_ID}/invoices/{INVOICE_ID}/sust \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Client Name",
@@ -203,7 +199,7 @@ curl -X POST http://localhost:8023/api/{TOKEN}/{COMPANY_ID}/invoices/5/sust \
 ### Rectification + Substitution (R1/R5 + S)
 
 ```bash
-curl -X POST http://localhost:8023/api/{TOKEN}/{COMPANY_ID}/invoices/5/rectsust \
+curl -X POST https://verifactu.investhinks.com/api/{TOKEN}/{COMPANY_ID}/invoices/{INVOICE_ID}/rectsust \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Client Name",
@@ -222,10 +218,10 @@ Cancel an invoice that was sent to AEAT by mistake.
 
 ```bash
 # Void single invoice
-curl -X PUT http://localhost:8023/api/{TOKEN}/{COMPANY_ID}/invoices/5/voided
+curl -X PUT https://verifactu.investhinks.com/api/{TOKEN}/{COMPANY_ID}/invoices/{INVOICE_ID}/voided
 
 # Void multiple invoices
-curl -X PUT http://localhost:8023/api/{TOKEN}/{COMPANY_ID}/invoices/5,6,7/voided
+curl -X PUT https://verifactu.investhinks.com/api/{TOKEN}/{COMPANY_ID}/invoices/5,6,7/voided
 ```
 
 **Requirements:**
@@ -241,10 +237,10 @@ Query invoices that have been registered with AEAT.
 
 ```bash
 # Query specific month
-curl "http://localhost:8023/api/{TOKEN}/{COMPANY_ID}/query?year=2025&month=1"
+curl "https://verifactu.investhinks.com/api/{TOKEN}/{COMPANY_ID}/query?year=2025&month=1"
 
 # Defaults to current month if not specified
-curl "http://localhost:8023/api/{TOKEN}/{COMPANY_ID}/query"
+curl "https://verifactu.investhinks.com/api/{TOKEN}/{COMPANY_ID}/query"
 ```
 
 ---
@@ -282,62 +278,21 @@ curl "http://localhost:8023/api/{TOKEN}/{COMPANY_ID}/query"
 
 ---
 
-## Company Setup
+## Create Invoice Fields
 
-Before creating invoices, add a company to the database with its certificate:
-
-### 1. Extract certificate from PKCS#12 file
-
-```bash
-openssl pkcs12 -in certificate.p12 -nocerts -nodes -out cert_key.pem
-openssl pkcs12 -in certificate.p12 -clcerts -nokeys -out cert_content.pem
-```
-
-### 2. Insert company with certificate
-
-```sql
-INSERT INTO companies SET
-  code = 'mycompany',
-  name = 'My Company SL',
-  vat_id = 'B12345678',
-  address = 'Calle Principal 1',
-  postal_code = '28001',
-  city = 'Madrid',
-  state = 'Madrid',
-  country = 'ES',
-  formula = '%Y%/%n.5%',
-  formula_r = 'R-%Y%/%n.5%',
-  first_num = 1,
-  created = CURRENT_DATE,
-  test = 1,
-  cert_key = '-----BEGIN PRIVATE KEY-----
-...content from cert_key.pem...
------END PRIVATE KEY-----',
-  cert_content = '-----BEGIN CERTIFICATE-----
-...content from cert_content.pem...
------END CERTIFICATE-----';
-```
-
-Each company requires its own digital certificate for AEAT communication.
-
-### Invoice Number Formulas
-
-| Placeholder | Description | Example |
-|-------------|-------------|---------|
-| `%n%` | Invoice number | 1, 2, 3... |
-| `%n.5%` | Padded number | 00001, 00002... |
-| `%y%` | 2-digit year | 25 |
-| `%Y%` | 4-digit year | 2025 |
-
-**Examples:**
-- `%Y%/%n.5%` → 2025/00001
-- `F-%y%-%n.4%` → F-25-0001
-- `%n%` → 1, 2, 3...
-
-### Test vs Production
-
-- `test = 1` → Sends to AEAT test environment
-- `test = 0` → Sends to AEAT production environment
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | **Yes** | Client/recipient name |
+| `vat_id` | string | No | Client VAT ID (NIF/CIF). Omit for simplified invoices |
+| `address` | string | No | Client address |
+| `postal_code` | string | No | Postal code |
+| `city` | string | No | City |
+| `state` | string | No | Province/state |
+| `country` | string | No | Country code (default: ES) |
+| `email` | string | No | Client email |
+| `ref` | string | No | Reference/PO number |
+| `comments` | string | No | Invoice comments |
+| `lines` | array | **Yes** | Invoice lines (see above) |
 
 ---
 
@@ -355,45 +310,64 @@ Each company requires its own digital certificate for AEAT communication.
 | 401 | Unauthorized / invalid token |
 | 404 | Resource not found |
 | 413 | Request body too large |
-| 503 | Service unavailable (database down) |
+| 503 | Service unavailable |
 
 ---
 
-## Docker Health Check
+## AEAT Submission Status
 
-Add to your `docker-compose.yml`:
+After creating an invoice, it will be automatically sent to AEAT within 60 seconds. Check the invoice status:
 
-```yaml
-services:
-  verifactu:
-    # ...
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8023/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+```bash
+curl https://verifactu.investhinks.com/api/{TOKEN}/{COMPANY_ID}/invoices/{INVOICE_ID}
 ```
 
+**Status fields:**
+| Field | Description |
+|-------|-------------|
+| `verifactu_dt` | Timestamp when sent to AEAT (null = pending) |
+| `verifactu_csv` | AEAT confirmation code (on success) |
+| `verifactu_err` | Error code (on failure) |
+| `fingerprint` | SHA-256 hash for invoice chain |
+
 ---
 
-## Environment Variables Reference
+## Invoice Number Formats
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `MYSQL_HOST` | No | 127.0.0.1 | Database host |
-| `MYSQL_PORT` | No | 3306 | Database port |
-| `MYSQL_NAME` | **Yes** | - | Database name |
-| `MYSQL_USER` | **Yes** | - | Database user |
-| `MYSQL_PASS` | **Yes** | - | Database password |
-| `SOFTWARE_COMPANY_NAME` | **Yes** | - | Your company name |
-| `SOFTWARE_COMPANY_NIF` | **Yes** | - | Your company VAT ID |
-| `SOFTWARE_NAME` | No | verifactu | Software name |
-| `SOFTWARE_ID` | No | vf | Software ID (2 chars) |
-| `SOFTWARE_VERSION` | No | 1.0 | Software version |
-| `SOFTWARE_INSTALL_NUMBER` | No | 00001 | Installation number |
-| `BACKEND_URL` | No | http://0.0.0.0:8023 | API URL |
-| `BACKEND_TOKEN` | No | Auto-generated | API authentication token |
-| `ALLOW_IP` | No | - | Restrict to specific IP |
-| `PROCESS_INTERVAL` | No | 60 | Auto-process interval (seconds, 0 to disable) |
-| `TIMEZONE` | No | Europe/Madrid | Timezone for dates |
+Companies can configure invoice number formats using placeholders:
+
+| Placeholder | Description | Example |
+|-------------|-------------|---------|
+| `%n%` | Invoice number | 1, 2, 3... |
+| `%n.5%` | Padded number (5 digits) | 00001, 00002... |
+| `%y%` | 2-digit year | 25 |
+| `%Y%` | 4-digit year | 2025 |
+
+**Examples:**
+- `%Y%/%n.5%` → 2025/00001
+- `F-%y%-%n.4%` → F-25-0001
+- `%n%` → 1, 2, 3...
+
+---
+
+## Test vs Production Mode
+
+Each company has a `test` flag:
+- `test = 1` → Invoices sent to AEAT **test** environment (prewww1.aeat.es)
+- `test = 0` → Invoices sent to AEAT **production** environment (www1.agenciatributaria.gob.es)
+
+Contact your administrator to switch between test and production modes.
+
+---
+
+## Rate Limits
+
+- Maximum 1000 invoices per batch submission
+- Automatic processing runs every 60 seconds
+- QR code generation is synchronous
+
+---
+
+## Support
+
+For API access, company setup, or technical support, contact your system administrator.
