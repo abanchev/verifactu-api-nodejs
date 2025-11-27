@@ -34,6 +34,7 @@
   "scripts": {
     "start": "node api.js",
     "test": "jest --runInBand --testTimeout=60000",
-    "test:integration": "jest --runInBand --testTimeout=120000 tests/integration"
+    "test:integration": "jest --runInBand --testTimeout=120000 tests/integration",
+    "cleanup:aeat": "node tests/cleanup-aeat.js"
   }
 }

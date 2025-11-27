@@ -323,10 +323,16 @@ async function createTestCompany(companyData = {}) {
   return company;
 }
 
+// Store verifactu instance for AEAT sync
+let verifactuInstance = null;
+
 /**
  * Create test invoice
+ * @param {number} companyId - Company ID
+ * @param {object} invoiceData - Invoice data
+ * @param {boolean} syncWithAEAT - If true, sync invoice numbers with AEAT (for integration tests)
  */
-async function createTestInvoice(companyId, invoiceData = {}) {
+async function createTestInvoice(companyId, invoiceData = {}, syncWithAEAT = false) {
   const defaults = {
     name: 'Test Client',
     vat_id: '99999999R',
@@ -355,12 +361,21 @@ async function createTestInvoice(companyId, invoiceData = {}) {
   // Get next invoice number
   const year = new Date().getFullYear();
   const typePrefix = invoice.verifactu_type.startsWith('R') ? 'R' : 'F';
-  const numResult = await query(
-    `SELECT COALESCE(MAX(num), 0) + 1 AS num FROM invoices
-     WHERE company_id = ? AND strftime('%Y', dt) = ? AND substr(verifactu_type, 1, 1) = ?`,
-    [companyId, String(year), typePrefix]
-  );
-  const num = numResult[0]?.num || 1;
+
+  let num;
+  if (syncWithAEAT && verifactuInstance) {
+    // For AEAT integration tests, sync with AEAT to avoid duplicates
+    const company = await getCompany(companyId);
+    num = await verifactuInstance.getNextInvoiceNumber(company, invoice.verifactu_type, year);
+  } else {
+    // For unit tests, use local DB only
+    const numResult = await query(
+      `SELECT COALESCE(MAX(num), 0) + 1 AS num FROM invoices
+       WHERE company_id = ? AND strftime('%Y', dt) = ? AND substr(verifactu_type, 1, 1) = ?`,
+      [companyId, String(year), typePrefix]
+    );
+    num = numResult[0]?.num || 1;
+  }
 
   const insertResult = await query(
     `INSERT INTO invoices SET
@@ -438,7 +453,7 @@ async function cleanupTestData(companyId) {
 function initVeriFactu() {
   const verifactuxml = require('../verifactu.xml');
 
-  return verifactuxml({
+  verifactuInstance = verifactuxml({
     query: query,
     software_company_name: config.software.company_name,
     software_company_nif: config.software.company_nif,
@@ -447,6 +462,8 @@ function initVeriFactu() {
     software_version: config.software.version,
     software_install_number: config.software.install_number
   });
+
+  return verifactuInstance;
 }
 
 /**

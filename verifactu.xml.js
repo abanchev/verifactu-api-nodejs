@@ -799,6 +799,133 @@ class VeriFactuXML {
   // ===========================================================================
 
   /**
+   * Parse invoice number from formatted string
+   * Extracts the numeric part from formats like "2025/00001" or "R-2025/001"
+   */
+  parseInvoiceNumber(numFmt) {
+    if (!numFmt) return 0;
+    const match = numFmt.match(/(\d+)$/);
+    return match ? parseInt(match[1]) : 0;
+  }
+
+  /**
+   * Get max invoice number from AEAT for a given year
+   * Returns { F: maxFNumber, R: maxRNumber }
+   */
+  async getMaxInvoiceNumberFromAEAT(company, year = 0) {
+    year = year || new Date().getFullYear();
+    const result = { F: 0, R: 0 };
+
+    // Query all 12 months of the year
+    for (let month = 1; month <= 12; month++) {
+      try {
+        const records = await this.queryRecords(company, year, month);
+        if (!Array.isArray(records)) continue;
+
+        for (const record of records) {
+          const numSerie = record.IDFactura?.NumSerieFactura;
+          const tipo = record.DatosRegistroFacturacion?.TipoFactura;
+          if (!numSerie || !tipo) continue;
+
+          const num = this.parseInvoiceNumber(numSerie);
+          const series = tipo.startsWith('R') ? 'R' : 'F';
+
+          if (num > result[series]) {
+            result[series] = num;
+          }
+        }
+      } catch (err) {
+        // Continue on error, may not have data for all months
+        this.log(`Error querying month ${month}: ${err.message}`);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Sync invoice numbers with AEAT
+   * Checks if local DB has any invoices for the year, if not queries AEAT
+   * and updates company.first_num to continue from the correct number
+   */
+  async syncInvoiceNumbers(company, year = 0) {
+    year = year || new Date().getFullYear();
+
+    // Check if we have any local invoices for this year
+    const localInvoices = await this.query(
+      'SELECT MAX(num) AS maxF FROM invoices WHERE company_id = ? AND YEAR(dt) = ? AND LEFT(verifactu_type, 1) = ?',
+      [company.id, year, 'F']
+    );
+    const localRInvoices = await this.query(
+      'SELECT MAX(num) AS maxR FROM invoices WHERE company_id = ? AND YEAR(dt) = ? AND LEFT(verifactu_type, 1) = ?',
+      [company.id, year, 'R']
+    );
+
+    const hasLocalF = localInvoices?.[0]?.maxF > 0;
+    const hasLocalR = localRInvoices?.[0]?.maxR > 0;
+
+    // If we have local invoices, no need to sync
+    if (hasLocalF && hasLocalR) {
+      return { synced: false, reason: 'Local invoices exist' };
+    }
+
+    // Query AEAT for max numbers
+    this.log(`Syncing invoice numbers with AEAT for year ${year}...`);
+    const aeatMax = await this.getMaxInvoiceNumberFromAEAT(company, year);
+
+    const result = {
+      synced: true,
+      year,
+      aeatMaxF: aeatMax.F,
+      aeatMaxR: aeatMax.R,
+      localMaxF: localInvoices?.[0]?.maxF || 0,
+      localMaxR: localRInvoices?.[0]?.maxR || 0
+    };
+
+    this.log(`AEAT max numbers: F=${aeatMax.F}, R=${aeatMax.R}`);
+    return result;
+  }
+
+  /**
+   * Get next invoice number, checking AEAT if needed
+   */
+  async getNextInvoiceNumber(company, type, year = 0) {
+    year = year || new Date().getFullYear();
+    const series = type.startsWith('R') ? 'R' : 'F';
+    const firstNum = company.first_num || 1;
+
+    // First check local DB
+    const localResult = await this.query(
+      'SELECT MAX(num) AS maxNum FROM invoices WHERE company_id = ? AND YEAR(dt) = ? AND LEFT(verifactu_type, 1) = ?',
+      [company.id, year, series]
+    );
+
+    const localMax = localResult?.[0]?.maxNum || 0;
+
+    // If we have local invoices, use that
+    if (localMax > 0) {
+      return localMax + 1;
+    }
+
+    // No local invoices - check AEAT
+    try {
+      this.log(`No local ${series}-series invoices for ${year}, checking AEAT...`);
+      const aeatMax = await this.getMaxInvoiceNumberFromAEAT(company, year);
+      const aeatNum = aeatMax[series] || 0;
+
+      if (aeatNum > 0) {
+        this.log(`AEAT has ${series}-series invoices up to ${aeatNum}, next will be ${aeatNum + 1}`);
+        return aeatNum + 1;
+      }
+    } catch (err) {
+      this.log(`Error checking AEAT: ${err.message}, falling back to first_num`);
+    }
+
+    // No AEAT invoices either, use first_num
+    return firstNum;
+  }
+
+  /**
    * Query submitted records from AEAT
    */
   async queryRecords(company, year = 0, month = 0) {

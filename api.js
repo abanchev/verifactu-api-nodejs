@@ -365,12 +365,9 @@ app.put('/api/:backend_token/:company_id/invoices/:id/voided', async (req, res) 
 });
 
 // Obtener siguiente número de factura del año actual
+// Checks AEAT if no local invoices exist to avoid duplicates
 async function nextNum(type) {
-  const y = new Date().getFullYear();
-  const fst = app.company.first_num || 1;
-  const f = (type.startsWith('R')) ? 'R' : 'F';
-  const result = await query('SELECT MAX(num) AS Mx FROM invoices WHERE company_id = ? AND YEAR(dt) = ? AND LEFT(verifactu_type, 1) = ?', [app.company.id, y, f]);
-  return (result.length) ? result[0].Mx + 1 : fst;
+  return verifactu.getNextInvoiceNumber(app.company, type);
 }
 
 // URL de la AEAT (pruebas/producción)
