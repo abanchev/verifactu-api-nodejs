@@ -132,7 +132,7 @@ curl -X POST https://verifactu.investhinks.com/api/{TOKEN}/{COMPANY_ID}/invoices
 {"id": 5}
 ```
 
-### Get Invoice QR Code
+### Get Invoice QR Code (PNG Image)
 
 Returns a PNG image for AEAT invoice verification.
 
@@ -140,6 +140,26 @@ Returns a PNG image for AEAT invoice verification.
 curl https://verifactu.investhinks.com/api/{TOKEN}/{COMPANY_ID}/invoices/{INVOICE_ID}/qr \
   --output invoice_qr.png
 ```
+
+### Get Invoice QR URL (Text)
+
+Returns the AEAT verification URL as JSON for third-party QR code generation.
+
+```bash
+curl https://verifactu.investhinks.com/api/{TOKEN}/{COMPANY_ID}/invoices/{INVOICE_ID}/qr-url
+```
+
+**Response:**
+```json
+{
+  "url": "https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=B06986152&numserie=2025%2F00001&fecha=15-01-2025&importe=121",
+  "invoice_number": "2025/00001",
+  "invoice_date": "15-01-2025",
+  "total": 121
+}
+```
+
+Use the `url` field to generate your own QR code with any library.
 
 ---
 

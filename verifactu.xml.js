@@ -47,67 +47,67 @@ const XML_NAMESPACES = {
  */
 const INVOICE_TYPE = {
   // Standard invoices
-  F1: 'F1', // Factura completa (Art. 6, 7.2 y 7.3 del RD 1619/2012)
-  F2: 'F2', // Factura simplificada sin identificación del destinatario (Art. 6.1.d)
-  F3: 'F3', // Factura emitida en sustitución de facturas simplificadas
+  F1: 'F1', // Complete invoice (Art. 6, 7.2 and 7.3 of RD 1619/2012)
+  F2: 'F2', // Simplified invoice without recipient identification (Art. 6.1.d)
+  F3: 'F3', // Invoice issued as replacement for simplified invoices
 
   // Rectification invoices
-  R1: 'R1', // Factura rectificativa (Art. 80.1, 80.2 y error fundado en derecho)
-  R2: 'R2', // Factura rectificativa (Art. 80.3) - Concurso de acreedores
-  R3: 'R3', // Factura rectificativa (Art. 80.4) - Deudas incobrables
-  R4: 'R4', // Factura rectificativa (Resto de causas)
-  R5: 'R5'  // Factura rectificativa en facturas simplificadas
+  R1: 'R1', // Rectification invoice (Art. 80.1, 80.2 and error based on law)
+  R2: 'R2', // Rectification invoice (Art. 80.3) - Bankruptcy proceedings
+  R3: 'R3', // Rectification invoice (Art. 80.4) - Uncollectible debts
+  R4: 'R4', // Rectification invoice (Other causes)
+  R5: 'R5'  // Rectification invoice for simplified invoices
 };
 
 /**
  * Rectification Types (ClaveTipoRectificativaType)
  */
 const RECTIFICATION_TYPE = {
-  SUBSTITUTION: 'S', // Sustitutiva - Replaces original invoice values
-  INCREMENTAL: 'I'   // Por diferencias - Shows only the difference
+  SUBSTITUTION: 'S', // Substitution - Replaces original invoice values
+  INCREMENTAL: 'I'   // By differences - Shows only the difference
 };
 
 /**
  * Operation Qualification (CalificacionOperacionType)
  */
 const OPERATION_QUALIFICATION = {
-  S1: 'S1', // Operación sujeta y no exenta - Sin inversión del sujeto pasivo
-  S2: 'S2', // Operación sujeta y no exenta - Con inversión del sujeto pasivo
-  N1: 'N1', // Operación no sujeta (Artículo 7, 14, otros)
-  N2: 'N2'  // Operación no sujeta por reglas de localización
+  S1: 'S1', // Taxable and not exempt - Without reverse charge
+  S2: 'S2', // Taxable and not exempt - With reverse charge
+  N1: 'N1', // Not subject to tax (Article 7, 14, others)
+  N2: 'N2'  // Not subject to tax due to localization rules
 };
 
 /**
  * Tax Regime Keys (ClaveRegimenType - Lista L8)
  */
 const TAX_REGIME = {
-  GENERAL: '01',                    // Operación de régimen general
-  EXPORT: '02',                     // Exportación
-  USED_GOODS: '03',                 // Régimen especial de bienes usados, objetos de arte, antigüedades
-  INVESTMENT_GOLD: '04',            // Régimen especial del oro de inversión
-  TRAVEL_AGENCIES: '05',            // Régimen especial de las agencias de viajes
-  ENTITY_GROUPS: '06',              // Régimen especial grupo de entidades en IVA (Nivel Avanzado)
-  CASH_CRITERIA: '07',              // Régimen especial del criterio de caja
-  IPSI_IGIC: '08',                  // Operaciones sujetas al IPSI/IGIC
-  TRAVEL_AGENCY_MEDIATOR: '09',     // Agencias de viaje como mediadoras
-  THIRD_PARTY_COLLECTIONS: '10',    // Cobros por cuenta de terceros
-  BUSINESS_RENTAL: '11',            // Arrendamiento de local de negocio
-  BUSINESS_RENTAL_NO_RET: '12',     // Arrendamiento de local sin retención
-  BUSINESS_RENTAL_RET: '13',        // Arrendamiento de local con retención
-  PRE_SII: '14',                    // Facturas anteriores a la inclusión en el SII
-  PENDING_VAT: '15',                // Factura con IVA pendiente de devengo
-  FIRST_SEMESTER_2017: '16',        // Régimen especial primer semestre 2017
-  ONE_STOP_SHOP: '17'               // Ventanilla única (OSS)
+  GENERAL: '01',                    // General regime operation
+  EXPORT: '02',                     // Export
+  USED_GOODS: '03',                 // Special regime for used goods, art objects, antiques
+  INVESTMENT_GOLD: '04',            // Special regime for investment gold
+  TRAVEL_AGENCIES: '05',            // Special regime for travel agencies
+  ENTITY_GROUPS: '06',              // Special regime for VAT entity groups (Advanced Level)
+  CASH_CRITERIA: '07',              // Special regime for cash accounting
+  IPSI_IGIC: '08',                  // Operations subject to IPSI/IGIC
+  TRAVEL_AGENCY_MEDIATOR: '09',     // Travel agencies as mediators
+  THIRD_PARTY_COLLECTIONS: '10',    // Collections on behalf of third parties
+  BUSINESS_RENTAL: '11',            // Business premises rental
+  BUSINESS_RENTAL_NO_RET: '12',     // Business premises rental without withholding
+  BUSINESS_RENTAL_RET: '13',        // Business premises rental with withholding
+  PRE_SII: '14',                    // Invoices prior to SII inclusion
+  PENDING_VAT: '15',                // Invoice with pending VAT accrual
+  FIRST_SEMESTER_2017: '16',        // Special regime first semester 2017
+  ONE_STOP_SHOP: '17'               // One Stop Shop (OSS)
 };
 
 /**
  * Tax Types (ImpuestoType)
  */
 const TAX_TYPE = {
-  IVA: '01',   // Impuesto sobre el Valor Añadido
-  IPSI: '02',  // Impuesto sobre la Producción, Servicios e Importación (Ceuta/Melilla)
-  IGIC: '03',  // Impuesto General Indirecto Canario
-  OTHER: '05'  // Otros
+  IVA: '01',   // Value Added Tax
+  IPSI: '02',  // Production, Services and Import Tax (Ceuta/Melilla)
+  IGIC: '03',  // Canary Islands General Indirect Tax
+  OTHER: '05'  // Other
 };
 
 /**

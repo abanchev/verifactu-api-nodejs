@@ -120,7 +120,7 @@ async function getElm(req, res, sql, id) {
   }
 }
 
-// Obtener último Id insertado
+// Get last inserted ID
 async function lastId() {
   const result = await query('SELECT LAST_INSERT_ID() AS id');
   return (result.length) ? result[0].id : 0;
@@ -164,21 +164,21 @@ async function checkAccess(req, res) {
     return false;
   }
 
-  // Comprobar token (constant-time comparison)
+  // Verify token (constant-time comparison)
   if(!cfg.backend_token || !secureCompare(cfg.backend_token, req.params.backend_token)) {
     req.status = 401;
     req.content.error = 'Missing or wrong token';
     return false;
   }
 
-  // Localizar empresa
+  // Find company
   if(req.params.company_id)
     app.company = await getElm(req, res, 'SELECT * FROM companies WHERE id = ?', req.params.company_id);
 
   return true;
 }
 
-// Procesar facturas para la AEAT
+// Process invoices for AEAT
 app.get('/api/:backend_token/process', async (req, res) => {
   if(await checkAccess(req, res))
     req.content = await verifactu.processPendingInvoices();
@@ -339,6 +339,22 @@ app.get('/api/:backend_token/:company_id/invoices/:id/qr', async (req, res) => {
   }
 });
 
+// QR URL endpoint - returns the verification URL as text for third-party QR generation
+app.get('/api/:backend_token/:company_id/invoices/:id/qr-url', async (req, res) => {
+  if(await checkAccess(req, res)) {
+    let invoice = await getElm(req, res, 'SELECT * FROM invoices WHERE id = ? AND company_id = ?', [req.params.id, req.params.company_id]);
+    if(!invoice)
+      return;
+
+    req.content = {
+      url: getQRUrl(app.company, invoice),
+      invoice_number: verifactu.formatInvoiceNumber(app.company, invoice),
+      invoice_date: formatDateForAEAT(invoice.dt),
+      total: invoice.total
+    };
+  }
+});
+
 app.put('/api/:backend_token/:company_id/invoices/:id/voided', async (req, res) => {
   if(!await checkAccess(req, res))
     return;
@@ -364,22 +380,38 @@ app.put('/api/:backend_token/:company_id/invoices/:id/voided', async (req, res) 
     req.status = 404;
 });
 
-// Obtener siguiente número de factura del año actual
+// Get next invoice number for current year
 // Checks AEAT if no local invoices exist to avoid duplicates
 async function nextNum(type) {
   return verifactu.getNextInvoiceNumber(app.company, type);
 }
 
-// URL de la AEAT (pruebas/producción)
+// AEAT URL (test/production)
 function getUrlAEAT() {
   return (app.company.test) ? 'https://prewww2.aeat.es/' : 'https://www2.agenciatributaria.gob.es/';
 }
 
-// Código QR de la factura
-function getQR(company, invoice) {
-  const url =	getUrlAEAT() + 'wlpl/TIKE-CONT/ValidarQR?nif=' + encodeURIComponent(app.company.vat_id) + '&numserie=' + encodeURIComponent(verifactu.formatInvoiceNumber(company, invoice)) +
-		'&fecha=' + encodeURIComponent(new Date(invoice.dt).toLocaleDateString('en-GB')) + '&importe=' + encodeURIComponent(invoice.total);
+// Format date as DD-MM-YYYY (required by AEAT)
+function formatDateForAEAT(dt) {
+  return new Date(dt).toLocaleDateString('en-GB').replace(/\//g, '-');
+}
 
+// Format amount with decimal point (not comma)
+function formatAmount(amount) {
+  return Number(amount).toFixed(2);
+}
+
+// Invoice QR verification URL
+function getQRUrl(company, invoice) {
+  return getUrlAEAT() + 'wlpl/TIKE-CONT/ValidarQR?nif=' + encodeURIComponent(company.vat_id) +
+    '&numserie=' + encodeURIComponent(verifactu.formatInvoiceNumber(company, invoice)) +
+    '&fecha=' + encodeURIComponent(formatDateForAEAT(invoice.dt)) +
+    '&importe=' + encodeURIComponent(formatAmount(invoice.total));
+}
+
+// Invoice QR code (PNG image)
+function getQR(company, invoice) {
+  const url = getQRUrl(company, invoice);
   const qr = require('qr-image');
   return qr.imageSync(url, {type: 'png', ec_level: 'M', size: 6});
 }
