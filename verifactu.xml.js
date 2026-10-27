@@ -557,6 +557,16 @@ class VeriFactuXML {
 
     if (!companies) return response;
 
+    // Log summary of companies by mode for visibility
+    const testCompanies = companies.filter(c => c.test === 1 || c.test === true);
+    const prodCompanies = companies.filter(c => c.test === 0 || c.test === false);
+    const undefinedCompanies = companies.filter(c => c.test === undefined || c.test === null);
+
+    this.log(`Processing invoices: ${testCompanies.length} TEST companies, ${prodCompanies.length} PRODUCTION companies`);
+    if (undefinedCompanies.length > 0) {
+      this.log(`WARNING: ${undefinedCompanies.length} companies have undefined test flag and will be skipped`);
+    }
+
     for (const company of companies) {
       response.companies[company.id] = {};
 
@@ -593,6 +603,15 @@ class VeriFactuXML {
   async submitInvoices(company, invoices, isVoided = false) {
     if (!invoices?.length) {
       return { message: 'No invoices to send' };
+    }
+
+    // Safety check: ensure test flag is explicitly defined
+    if (company.test === undefined || company.test === null) {
+      this.log(`ERROR: Company ${company.id} has undefined test flag - aborting to prevent accidental submissions`);
+      return {
+        status: 0,
+        error: `Company ${company.id} must have explicit test flag (0 or 1) before sending invoices`
+      };
     }
 
     // Build invoice number lookup map
@@ -992,7 +1011,18 @@ class VeriFactuXML {
         };
       }
 
-      const url = new URL(company.test ? AEAT_URLS.TEST : AEAT_URLS.PRODUCTION);
+      // Validate test flag is explicitly set (not undefined/null)
+      if (company.test === undefined || company.test === null) {
+        return {
+          status: 0,
+          error: `Company ${company.id} has no explicit test flag set - refusing to send to prevent accidental production submissions`
+        };
+      }
+
+      const isTestMode = company.test === 1 || company.test === true;
+      const url = new URL(isTestMode ? AEAT_URLS.TEST : AEAT_URLS.PRODUCTION);
+
+      this.log(`Sending invoice to AEAT ${isTestMode ? 'TEST' : 'PRODUCTION'} endpoint for company ${company.id} (${company.name || company.vat_id})`);
 
       const options = {
         hostname: url.hostname,
